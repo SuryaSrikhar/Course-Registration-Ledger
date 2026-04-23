@@ -1,96 +1,99 @@
-# Course Registration Ledger (Remix Deployment)
+# Course Registration Ledger (Ganache + Hardhat Auto Deployment)
 
-This is a full-stack blockchain-based course registration system with no Hardhat dependency.
+This project is a full-stack blockchain Course Registration Ledger with automated deployment setup.
 
-It provides:
-- no over-enrollment through smart contract seat checks,
-- immutable and transparent course activity,
-- secure add/drop flows.
+Manual copy-paste of contract address and ABI is removed.
 
 ## Tech Stack
 
 - Frontend: React + Vite + Tailwind CSS + Framer Motion
 - Backend: Node.js + Express + ethers.js
-- Smart Contract: Solidity deployed manually from Remix IDE
+- Smart Contract Deployment: Hardhat -> Ganache
 - Wallet: MetaMask
 
-## Clean Structure
+## Updated Structure
 
-- contracts/
-- backend/
-- frontend/
-
-## Where To Paste Contract Address And ABI
-
-### Backend
-
-1. Paste contract address:
+- contracts/CourseRegistrationLedger.sol
+- hardhat.config.js
+- scripts/deploy.js
+- backend/server.js
 - backend/config.js
-- Update MANUAL_CONTRACT_ADDRESS (or set CONTRACT_ADDRESS in .env)
+- backend/contract-address.txt (auto-generated)
+- backend/contract-abi.json (auto-generated/updated)
+- frontend/src/App.jsx
+- frontend/src/services/api.js
 
-2. Paste full ABI JSON array:
-- backend/contract-abi.json
+## Automated Flow
 
-### Frontend
-
-1. Paste contract address:
-- frontend/src/config/contractConfig.js
-- Update CONTRACT_ADDRESS
-
-2. Paste full ABI JSON array:
-- frontend/src/config/contractConfig.js
-- Update CONTRACT_ABI
-
-Frontend automatically uses MetaMask transaction mode when this file is configured.
+1. Start Ganache at http://127.0.0.1:7545
+2. Run deploy script with Hardhat
+3. Deploy script writes:
+   - backend/contract-address.txt
+   - backend/contract-abi.json
+4. Backend auto-reads both files at startup
+5. Frontend fetches contract config from backend (/contract-config)
+6. App runs without any manual ABI/address edits
 
 ## Environment
 
-Use .env in root:
+Create .env in root (use .env.example):
 
-RPC_URL=http://127.0.0.1:8545
-SERVER_PRIVATE_KEY=0xYOUR_TEST_PRIVATE_KEY_FOR_WRITE_APIS
-CONTRACT_ADDRESS=0xYOUR_REMIX_DEPLOYED_CONTRACT_ADDRESS
+RPC_URL=http://127.0.0.1:7545
+DEPLOYER_PRIVATE_KEY=0xYOUR_GANACHE_PRIVATE_KEY_OPTIONAL
+SERVER_PRIVATE_KEY=0xYOUR_GANACHE_PRIVATE_KEY_FOR_BACKEND_WRITES
 COURSE_IDS=CSE101,CSE102
 PORT=4000
 CORS_ORIGIN=http://localhost:5173
 
 Notes:
-- SERVER_PRIVATE_KEY is used by backend write APIs.
-- COURSE_IDS is optional and only needed if your contract does not emit CourseCreated events.
+- DEPLOYER_PRIVATE_KEY is optional if Ganache unlocked accounts are available.
+- SERVER_PRIVATE_KEY is required for backend write APIs (/create-course, /enroll, /drop).
+- COURSE_IDS is optional fallback if your contract emits no CourseCreated events.
 
-## Run
+## Run Instructions
 
-1. Install dependencies:
+1. Install dependencies
 
 npm install
 
-2. Start backend:
+2. Start Ganache
 
-node backend/server.js
+- Use Ganache UI or CLI
+- Ensure RPC is running at http://127.0.0.1:7545
 
-3. Start frontend:
+3. Deploy contract (auto-generates ABI + address files)
 
-cd frontend
-npm start
+npm run deploy
 
-Open http://localhost:5173
+4. Start backend
+
+npm run server
+
+5. Start frontend
+
+npm run frontend
+
+6. Open app
+
+http://localhost:5173
 
 ## Backend APIs
 
+- GET /health
+- GET /contract-config
 - GET /courses
 - POST /create-course
-  - body: { "courseId": "CSE101", "capacity": 60 }
 - POST /enroll
-  - body: { "courseId": "CSE101" }
 - POST /drop
-  - body: { "courseId": "CSE101" }
 
-## How It Works (Review Summary)
+## Error Handling Notes
 
-1. Contract is deployed manually in Remix.
-2. You paste ABI and contract address into backend/frontend config files.
-3. Backend reads live course state from blockchain and exposes REST APIs.
-4. Frontend shows a premium animated dashboard with real-time polling.
-5. Wallet connection is done through window.ethereum (MetaMask).
-6. Enroll, drop, and create-course operations submit blockchain transactions.
-7. Revert reasons such as Course full or Already enrolled are surfaced as user-friendly notifications.
+- If Ganache is not running, deployment fails with network connection error.
+- If contract artifact files are missing, backend startup fails with a clear message to run npm run deploy.
+- deploy.js ensures output paths exist before writing files.
+- Contract name used in deployment is CourseRegistrationLedger and matches contracts/CourseRegistrationLedger.sol.
+
+## Cleanup Notes
+
+- Removed old manual frontend contract config file: frontend/src/config/contractConfig.js
+- No Python backend files were found in this repository.

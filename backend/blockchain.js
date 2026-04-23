@@ -4,7 +4,9 @@ const {
   CONTRACT_ADDRESS,
   CONTRACT_ABI,
   COURSE_IDS,
-  SERVER_PRIVATE_KEY
+  SERVER_PRIVATE_KEY,
+  CONTRACT_ADDRESS_FILE,
+  CONTRACT_ABI_FILE
 } = require("./config");
 
 function hasFunction(contract, name, inputCount) {
@@ -17,14 +19,14 @@ function hasFunction(contract, name, inputCount) {
 }
 
 function ensureContractConfig() {
-  if (!CONTRACT_ADDRESS || CONTRACT_ADDRESS.includes("PASTE_REMIX") || !ethers.isAddress(CONTRACT_ADDRESS)) {
+  if (!CONTRACT_ADDRESS || !ethers.isAddress(CONTRACT_ADDRESS)) {
     throw new Error(
-      "Invalid CONTRACT_ADDRESS. Paste your Remix deployed contract address in backend/config.js or set CONTRACT_ADDRESS in .env"
+      `Invalid contract address. Run \"npm run deploy\" to generate ${CONTRACT_ADDRESS_FILE}, or set CONTRACT_ADDRESS in .env`
     );
   }
 
   if (!Array.isArray(CONTRACT_ABI) || CONTRACT_ABI.length === 0) {
-    throw new Error("CONTRACT_ABI is empty. Paste your ABI in backend/contract-abi.json");
+    throw new Error(`Contract ABI is missing. Run \"npm run deploy\" to generate ${CONTRACT_ABI_FILE}`);
   }
 }
 

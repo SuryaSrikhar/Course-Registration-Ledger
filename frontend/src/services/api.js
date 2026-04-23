@@ -22,6 +22,9 @@ export const api = {
   async health() {
     return request("/health");
   },
+  async getContractConfig() {
+    return request("/contract-config");
+  },
   async getCourses() {
     return request("/courses");
   },
