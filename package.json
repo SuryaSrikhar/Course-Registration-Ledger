@@ -1,16 +1,24 @@
 {
   "name": "bc_project",
   "version": "1.0.0",
-  "description": "Remix-deployed blockchain course registration system",
+  "description": "Ganache + Hardhat deployed blockchain course registration system",
   "private": true,
   "workspaces": [
     "frontend"
   ],
   "scripts": {
+    "compile": "hardhat compile",
+    "deploy": "hardhat run scripts/deploy.js --network ganache",
     "server": "node backend/server.js",
     "frontend": "npm run start --workspace frontend"
   },
-  "keywords": ["blockchain", "course-registration", "remix", "ethers"],
+  "keywords": [
+    "blockchain",
+    "course-registration",
+    "hardhat",
+    "ganache",
+    "ethers"
+  ],
   "author": "",
   "license": "ISC",
   "dependencies": {
@@ -18,5 +26,9 @@
     "dotenv": "^16.6.1",
     "ethers": "^6.16.0",
     "express": "^4.21.2"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-ethers": "^3.0.8",
+    "hardhat": "^2.22.17"
   }
 }

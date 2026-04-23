@@ -1,6 +1,6 @@
 const express = require("express");
 const cors = require("cors");
-const { PORT, CORS_ORIGIN } = require("./config");
+const { PORT, CORS_ORIGIN, CONTRACT_ABI } = require("./config");
 const {
   CONTRACT_ADDRESS,
   createProvider,
@@ -52,12 +52,20 @@ app.get("/health", async (_req, res) => {
       ok: true,
       blockNumber,
       contractAddress: CONTRACT_ADDRESS,
+      contractAbiLoaded: Array.isArray(CONTRACT_ABI) && CONTRACT_ABI.length > 0,
       writeEnabled: Boolean(writeContext),
       signer: writeContext?.signer?.address || null
     });
   } catch (error) {
     res.status(500).json({ ok: false, error: parseContractError(error) });
   }
+});
+
+app.get("/contract-config", (_req, res) => {
+  res.json({
+    contractAddress: CONTRACT_ADDRESS,
+    contractAbi: CONTRACT_ABI
+  });
 });
 
 app.get("/courses", async (_req, res) => {

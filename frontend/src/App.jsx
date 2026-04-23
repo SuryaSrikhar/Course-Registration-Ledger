@@ -8,11 +8,6 @@ import { WalletPanel } from "./components/WalletPanel";
 import { StatsBar } from "./components/StatsBar";
 import { AdminPanel } from "./components/AdminPanel";
 import { CourseCard } from "./components/CourseCard";
-import {
-  CONTRACT_ABI,
-  CONTRACT_ADDRESS,
-  isFrontendContractConfigured
-} from "./config/contractConfig";
 
 function nowLabel(value) {
   if (!value) {
@@ -75,6 +70,14 @@ export default function App() {
     return "Transaction failed";
   }
 
+  function isValidBackendContractConfig(config) {
+    return (
+      ethers.isAddress(config?.contractAddress || "") &&
+      Array.isArray(config?.contractAbi) &&
+      config.contractAbi.length > 0
+    );
+  }
+
   async function refreshWalletBlock() {
     if (!window.ethereum) {
       return;
@@ -107,8 +110,14 @@ export default function App() {
       setNetworkLabel(`${network.name} (${network.chainId.toString()})`);
       setBlockNumber(await provider.getBlockNumber());
 
-      if (isFrontendContractConfigured()) {
-        const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+      const contractConfig = await api.getContractConfig().catch(() => null);
+
+      if (isValidBackendContractConfig(contractConfig)) {
+        const contract = new ethers.Contract(
+          contractConfig.contractAddress,
+          contractConfig.contractAbi,
+          signer
+        );
         setWalletContract(contract);
         setTxMode("metamask");
       } else {
@@ -339,12 +348,12 @@ export default function App() {
 
           <section className="glass-panel h-full">
             <p className="text-xs uppercase tracking-[0.25em] text-slate-300/90">Contract Setup</p>
-            <h3 className="mt-1 text-lg font-display text-white">Manual Remix Configuration</h3>
+            <h3 className="mt-1 text-lg font-display text-white">Automated Ganache Configuration</h3>
             <p className="mt-3 text-sm text-slate-200">
-              Paste contract address and ABI in frontend/src/config/contractConfig.js and backend/config.js.
+              Contract address and ABI are loaded automatically after deployment from backend artifact files.
             </p>
             <p className="mt-2 text-sm text-slate-300">
-              When frontend contract config is valid, transactions run via MetaMask. Otherwise, backend APIs are used.
+              When backend contract config is available, transactions run via MetaMask. Otherwise, backend APIs are used.
             </p>
           </section>
         </section>
