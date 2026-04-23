@@ -1,0 +1,49 @@
+@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Plus Jakarta Sans", sans-serif;
+  background: radial-gradient(circle at 20% 20%, #123161 0%, #071129 45%, #050b1c 100%);
+}
+
+@layer components {
+  .glass-panel {
+    @apply rounded-2xl border border-white/15 bg-white/[0.09] p-5 shadow-glass backdrop-blur-xl;
+  }
+
+  .metric-card {
+    @apply rounded-xl border border-white/10 bg-slate-900/35 p-3;
+  }
+
+  .metric-label {
+    @apply text-[10px] uppercase tracking-[0.18em] text-slate-300;
+  }
+
+  .metric-value {
+    @apply mt-1 text-lg font-semibold leading-tight;
+  }
+
+  .input-shell {
+    @apply w-full rounded-xl border border-white/20 bg-slate-900/45 px-4 py-2 text-sm text-white outline-none transition placeholder:text-slate-400 focus:border-cyan-200;
+  }
+
+  .cta-button {
+    @apply rounded-xl border border-cyan-200/40 bg-gradient-to-r from-cyan-300/35 to-lime-300/35 px-4 py-2 text-sm font-semibold text-white transition hover:from-cyan-300/50 hover:to-lime-300/50 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .course-glow {
+    background-image: linear-gradient(140deg, rgba(255, 255, 255, 0.08), rgba(57, 208, 255, 0.05));
+  }
+}
