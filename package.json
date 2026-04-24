@@ -10,7 +10,8 @@
     "compile": "hardhat compile",
     "deploy": "hardhat run scripts/deploy.js --network ganache",
     "server": "node backend/server.js",
-    "frontend": "npm run start --workspace frontend"
+    "frontend": "npm run start --workspace frontend",
+    "trace:ganache": "node scripts/trace-ganache.js"
   },
   "keywords": [
     "blockchain",
