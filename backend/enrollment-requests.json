@@ -1,0 +1,13 @@
+[
+  {
+    "id": "9630034f-c021-4b5a-a55f-d97a013377ca",
+    "studentUid": "PES039",
+    "studentEmail": "akhileshm2204@gmail.com",
+    "studentName": "Akhilesh",
+    "courseId": "CSE-101",
+    "status": "approved",
+    "createdAt": 1776994903344,
+    "decidedAt": 1776994930625,
+    "decidedBy": "admin@example.com"
+  }
+]

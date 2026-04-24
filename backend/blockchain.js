@@ -212,6 +212,66 @@ async function discoverCourseIds(contract) {
   return Array.from(ids);
 }
 
+async function listStudentEnrollments(contract, studentUid) {
+  if (!hasFunction(contract, "isEnrolled", 2)) {
+    return [];
+  }
+
+  const ids = await discoverCourseIds(contract);
+  const enrolledCourses = [];
+
+  for (const courseId of ids) {
+    try {
+      const enrolled = await contract.isEnrolled(courseId, studentUid);
+      if (Boolean(enrolled)) {
+        enrolledCourses.push(courseId);
+      }
+    } catch {
+      // Ignore malformed IDs and continue scanning.
+    }
+  }
+
+  enrolledCourses.sort((a, b) => a.localeCompare(b));
+  return enrolledCourses;
+}
+
+async function validateEnrollRequest(contract, payload) {
+  const courseId = String(payload.courseId || "").trim();
+  const studentUid = String(payload.studentUid || "").trim();
+
+  if (!courseId) {
+    throw new Error("courseId is required");
+  }
+  if (!studentUid) {
+    throw new Error("studentUid is required");
+  }
+
+  const course = await readCourse(contract, courseId);
+  if (!course.exists) {
+    throw new Error("Course does not exist");
+  }
+  if (course.seatsRemaining <= 0) {
+    throw new Error("No seats available for this course");
+  }
+
+  if (hasFunction(contract, "isEnrolled", 2)) {
+    const alreadyEnrolled = await contract.isEnrolled(courseId, studentUid);
+    if (Boolean(alreadyEnrolled)) {
+      throw new Error("Student is already enrolled in this course");
+    }
+  }
+
+  if (hasFunction(contract, "getStudent", 1)) {
+    const student = await fetchStudent(contract, studentUid);
+    if (!student.exists) {
+      throw new Error("Student is not registered");
+    }
+    if (!student.eligible) {
+      throw new Error("Student is not eligible");
+    }
+  }
+}
+
 async function fetchCourses(contract) {
   const discoveredIds = await discoverCourseIds(contract);
   const courses = [];
@@ -256,10 +316,116 @@ async function sendCreateCourse(contract, payload) {
 
   if (hasFunction(contract, "createCourse", 4)) {
     const title = String(payload.title || courseId).trim();
-    return contract.createCourse(courseId, title, capacity, false);
+    return contract.createCourse(courseId, title, capacity, Boolean(payload.approvalRequired ?? true));
   }
 
   throw new Error("createCourse function not found in ABI. Expected createCourse(string,uint256) or createCourse(string,string,uint16,bool)");
+}
+
+async function sendUpdateCourseCapacity(contract, payload) {
+  const courseId = String(payload.courseId || "").trim();
+  const capacity = Number(payload.capacity);
+
+  if (!courseId) {
+    throw new Error("courseId is required");
+  }
+  if (!Number.isInteger(capacity) || capacity <= 0) {
+    throw new Error("capacity must be a positive integer");
+  }
+  if (!hasFunction(contract, "updateCourseCapacity", 2)) {
+    throw new Error("updateCourseCapacity(string,uint16) function not found in ABI");
+  }
+
+  return contract.updateCourseCapacity(courseId, capacity);
+}
+
+async function sendSetCourseApproval(contract, payload) {
+  const courseId = String(payload.courseId || "").trim();
+  if (!courseId) {
+    throw new Error("courseId is required");
+  }
+  if (!hasFunction(contract, "setCourseApprovalRequired", 2)) {
+    throw new Error("setCourseApprovalRequired(string,bool) function not found in ABI");
+  }
+
+  return contract.setCourseApprovalRequired(courseId, Boolean(payload.approvalRequired));
+}
+
+async function sendApproveStudent(contract, payload) {
+  const courseId = String(payload.courseId || "").trim();
+  const studentUid = String(payload.studentUid || "").trim();
+  if (!courseId || !studentUid) {
+    throw new Error("courseId and studentUid are required");
+  }
+  if (!hasFunction(contract, "approveStudentForCourse", 3)) {
+    throw new Error("approveStudentForCourse(string,string,bool) function not found in ABI");
+  }
+
+  return contract.approveStudentForCourse(courseId, studentUid, Boolean(payload.approved));
+}
+
+async function sendRegisterStudent(contract, payload) {
+  const studentUid = String(payload.studentUid || "").trim();
+  const walletAddress = String(payload.walletAddress || "").trim();
+
+  if (!studentUid) {
+    throw new Error("studentUid is required");
+  }
+  if (!ethers.isAddress(walletAddress)) {
+    throw new Error("walletAddress must be a valid address");
+  }
+  if (!hasFunction(contract, "registerStudent", 3)) {
+    throw new Error("registerStudent(string,address,bool) function not found in ABI");
+  }
+
+  return contract.registerStudent(studentUid, walletAddress, Boolean(payload.eligible ?? true));
+}
+
+async function sendSetStudentEligibility(contract, payload) {
+  const studentUid = String(payload.studentUid || "").trim();
+  if (!studentUid) {
+    throw new Error("studentUid is required");
+  }
+  if (!hasFunction(contract, "setStudentEligibility", 2)) {
+    throw new Error("setStudentEligibility(string,bool) function not found in ABI");
+  }
+
+  return contract.setStudentEligibility(studentUid, Boolean(payload.eligible));
+}
+
+async function fetchStudent(contract, studentUid) {
+  const uid = String(studentUid || "").trim();
+  if (!uid) {
+    throw new Error("studentUid is required");
+  }
+  if (!hasFunction(contract, "getStudent", 1)) {
+    throw new Error("getStudent(string) function not found in ABI");
+  }
+
+  const raw = await contract.getStudent(uid);
+  const values = Array.from(raw || []);
+
+  return {
+    wallet: String(raw?.wallet || values[0] || ethers.ZeroAddress),
+    eligible: Boolean(raw?.eligible ?? values[1]),
+    exists: Boolean(raw?.exists ?? values[2])
+  };
+}
+
+async function isStudentApprovedForCourse(contract, courseId, studentUid) {
+  const normalizedCourseId = String(courseId || "").trim();
+  const normalizedStudentUid = String(studentUid || "").trim();
+
+  if (!normalizedCourseId || !normalizedStudentUid) {
+    return false;
+  }
+
+  if (!hasFunction(contract, "isStudentApprovedForCourse", 2)) {
+    return true;
+  }
+
+  const approved = await contract.isStudentApprovedForCourse(normalizedCourseId, normalizedStudentUid);
+  return Boolean(approved);
 }
 
 async function sendEnroll(contract, payload) {
@@ -321,9 +487,18 @@ module.exports = {
   createProvider,
   createReadContract,
   createWriteContext,
+  fetchStudent,
   fetchCourses,
+  listStudentEnrollments,
   parseContractError,
+  sendApproveStudent,
   sendCreateCourse,
   sendEnroll,
+  sendRegisterStudent,
+  sendSetCourseApproval,
+  sendSetStudentEligibility,
+  sendUpdateCourseCapacity,
+  isStudentApprovedForCourse,
+  validateEnrollRequest,
   sendDrop
 };

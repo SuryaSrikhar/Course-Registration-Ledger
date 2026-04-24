@@ -8,7 +8,7 @@ function seatPercent(enrolled, capacity) {
   return Math.min(Math.round((enrolled / capacity) * 100), 100);
 }
 
-export function CourseCard({ course, onEnroll, onDrop, loadingAction, canEnroll }) {
+export function CourseCard({ course, onEnroll, onDrop, loadingAction, canEnroll, showActions = true }) {
   const courseIdentifier = course.courseId || course.courseUid;
   const courseTitle = course.title || courseIdentifier;
   const progress = seatPercent(course.enrolled, course.capacity);
@@ -61,7 +61,8 @@ export function CourseCard({ course, onEnroll, onDrop, loadingAction, canEnroll 
         </div>
       </div>
 
-      <div className="mt-5 flex flex-wrap items-center gap-3">
+      {showActions ? (
+        <div className="mt-5 flex flex-wrap items-center gap-3">
         <button
           type="button"
           disabled={!canEnroll || isFull || actionBusy}
@@ -88,7 +89,8 @@ export function CourseCard({ course, onEnroll, onDrop, loadingAction, canEnroll 
         </span>
 
         {isFull ? <span className="text-xs font-semibold text-brand-peach">Course is full</span> : null}
-      </div>
+        </div>
+      ) : null}
     </motion.article>
   );
 }

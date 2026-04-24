@@ -2,16 +2,39 @@ const express = require("express");
 const cors = require("cors");
 const { PORT, CORS_ORIGIN, CONTRACT_ABI } = require("./config");
 const {
+  createSession,
+  authenticate,
+  getSession,
+  listStudents,
+  registerStudentUser,
+  removeSession
+} = require("./auth-store");
+const {
+  createOrRefreshPendingRequest,
+  findRequestById,
+  listEnrollmentRequests,
+  updateEnrollmentRequestDecision
+} = require("./enrollment-requests");
+const {
   CONTRACT_ADDRESS,
   createProvider,
   createReadContract,
   createWriteContext,
+  fetchStudent,
   fetchCourses,
+  listStudentEnrollments,
+  isStudentApprovedForCourse,
   parseContractError,
+  sendApproveStudent,
   sendCreateCourse,
   sendEnroll,
+  sendRegisterStudent,
+  sendUpdateCourseCapacity,
+  validateEnrollRequest,
   sendDrop
 } = require("./blockchain");
+
+const MAX_STUDENT_ENROLLMENTS = 6;
 
 const app = express();
 const port = Number(PORT || 4000);
@@ -44,6 +67,99 @@ function getWriteContract() {
 
   return writeContext.contract;
 }
+
+function getBearerToken(req) {
+  const header = String(req.headers.authorization || "");
+  if (!header.toLowerCase().startsWith("bearer ")) {
+    return "";
+  }
+
+  return header.slice(7).trim();
+}
+
+function requireAuth(req, res, next) {
+  const token = getBearerToken(req);
+  const session = getSession(token);
+  if (!session) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  req.auth = {
+    token,
+    user: session.user
+  };
+
+  return next();
+}
+
+function requireRole(role) {
+  return (req, res, next) => {
+    if (req.auth?.user?.role !== role) {
+      return res.status(403).json({ error: `Forbidden: ${role} access required` });
+    }
+
+    return next();
+  };
+}
+
+async function syncStudentWallet(writeContract, user, walletAddress) {
+  const studentUid = String(user.studentUid || "").trim();
+  if (!studentUid) {
+    throw new Error("studentUid is not configured for this account");
+  }
+
+  const student = await fetchStudent(writeContract, studentUid);
+
+  if (!student.exists) {
+    const tx = await sendRegisterStudent(writeContract, {
+      studentUid,
+      walletAddress,
+      eligible: true
+    });
+    await tx.wait();
+    return { synced: true, studentUid, walletAddress, createdOnChain: true, eligible: true };
+  }
+
+  if (String(student.wallet).toLowerCase() !== String(walletAddress).toLowerCase()) {
+    throw new Error("This student UID is already linked to another wallet. Contact admin.");
+  }
+
+  return {
+    synced: true,
+    studentUid,
+    walletAddress,
+    createdOnChain: false,
+    eligible: Boolean(student.eligible)
+  };
+}
+
+app.post("/auth/register", (req, res) => {
+  try {
+    const user = registerStudentUser(req.body || {});
+    res.status(201).json({ message: "Student account created", user });
+  } catch (error) {
+    res.status(400).json({ error: error.message || "Registration failed" });
+  }
+});
+
+app.post("/auth/login", (req, res) => {
+  try {
+    const user = authenticate(req.body || {});
+    const token = createSession(user);
+    res.status(200).json({ token, user });
+  } catch (error) {
+    res.status(401).json({ error: error.message || "Login failed" });
+  }
+});
+
+app.post("/auth/logout", requireAuth, (req, res) => {
+  removeSession(req.auth.token);
+  res.status(200).json({ message: "Logged out" });
+});
+
+app.get("/auth/me", requireAuth, (req, res) => {
+  res.json({ user: req.auth.user });
+});
 
 app.get("/health", async (_req, res) => {
   try {
@@ -86,6 +202,228 @@ app.get("/courses", async (_req, res) => {
     });
   } catch (error) {
     res.status(500).json({ error: parseContractError(error) });
+  }
+});
+
+app.get("/admin/students", requireAuth, requireRole("admin"), async (_req, res) => {
+  try {
+    const baseStudents = listStudents();
+    const students = await Promise.all(
+      baseStudents.map(async (student) => {
+        try {
+          const enrolledCourses = await listStudentEnrollments(readContract, student.studentUid);
+          return {
+            ...student,
+            enrolledCourses
+          };
+        } catch {
+          return {
+            ...student,
+            enrolledCourses: []
+          };
+        }
+      })
+    );
+
+    res.json({ students });
+  } catch (error) {
+    res.status(500).json({ error: parseContractError(error) });
+  }
+});
+
+app.post("/admin/create-course", requireAuth, requireRole("admin"), async (req, res) => {
+  try {
+    const writeContract = getWriteContract();
+    const tx = await sendCreateCourse(writeContract, {
+      ...(req.body || {}),
+      approvalRequired: true
+    });
+    const receipt = await tx.wait();
+
+    res.status(201).json({
+      message: "Course created successfully",
+      txHash: receipt.hash
+    });
+  } catch (error) {
+    res.status(400).json({ error: parseContractError(error) });
+  }
+});
+
+app.post("/admin/update-course-capacity", requireAuth, requireRole("admin"), async (req, res) => {
+  try {
+    const writeContract = getWriteContract();
+    const tx = await sendUpdateCourseCapacity(writeContract, req.body || {});
+    const receipt = await tx.wait();
+
+    res.status(200).json({
+      message: "Course capacity updated",
+      txHash: receipt.hash
+    });
+  } catch (error) {
+    res.status(400).json({ error: parseContractError(error) });
+  }
+});
+
+app.get("/admin/enrollment-requests", requireAuth, requireRole("admin"), (_req, res) => {
+  res.json({ requests: listEnrollmentRequests() });
+});
+
+app.post("/admin/enrollment-requests/:requestId/decision", requireAuth, requireRole("admin"), async (req, res) => {
+  try {
+    const request = findRequestById(req.params.requestId);
+    if (!request) {
+      return res.status(404).json({ error: "Enrollment request not found" });
+    }
+
+    const approved = Boolean(req.body?.approved);
+    const writeContract = getWriteContract();
+    let approvalTxHash = "";
+    let enrollmentTxHash = "";
+
+    if (approved) {
+      const approvalTx = await sendApproveStudent(writeContract, {
+        courseId: request.courseId,
+        studentUid: request.studentUid,
+        approved: true
+      });
+      const approvalReceipt = await approvalTx.wait();
+      approvalTxHash = approvalReceipt.hash;
+
+      await validateEnrollRequest(readContract, {
+        courseId: request.courseId,
+        studentUid: request.studentUid
+      });
+
+      const enrollTx = await sendEnroll(writeContract, {
+        courseId: request.courseId,
+        studentUid: request.studentUid
+      });
+      const enrollReceipt = await enrollTx.wait();
+      enrollmentTxHash = enrollReceipt.hash;
+    }
+
+    const updatedRequest = updateEnrollmentRequestDecision({
+      requestId: request.id,
+      approved,
+      decidedBy: req.auth.user.email
+    });
+
+    return res.status(200).json({
+      message: approved ? "Student approved and enrolled" : "Enrollment request rejected",
+      request: updatedRequest,
+      approvalTxHash,
+      enrollmentTxHash
+    });
+  } catch (error) {
+    return res.status(400).json({ error: parseContractError(error) });
+  }
+});
+
+app.post("/admin/drop-student", requireAuth, requireRole("admin"), async (req, res) => {
+  try {
+    const courseId = String(req.body?.courseId || "").trim();
+    const studentUid = String(req.body?.studentUid || "").trim();
+
+    if (!courseId || !studentUid) {
+      throw new Error("courseId and studentUid are required");
+    }
+
+    const writeContract = getWriteContract();
+    const tx = await sendDrop(writeContract, { courseId, studentUid });
+    const receipt = await tx.wait();
+
+    res.status(200).json({
+      message: "Student dropped from course",
+      txHash: receipt.hash
+    });
+  } catch (error) {
+    res.status(400).json({ error: parseContractError(error) });
+  }
+});
+
+app.post("/student/sync-wallet", requireAuth, requireRole("student"), async (req, res) => {
+  try {
+    const writeContract = getWriteContract();
+    const walletAddress = String(req.body?.walletAddress || "").trim();
+    const result = await syncStudentWallet(writeContract, req.auth.user, walletAddress);
+    res.status(200).json(result);
+  } catch (error) {
+    res.status(400).json({ error: parseContractError(error) });
+  }
+});
+
+app.post("/student/enroll", requireAuth, requireRole("student"), async (req, res) => {
+  try {
+    const writeContract = getWriteContract();
+    const courseId = String(req.body?.courseId || "").trim();
+    const studentUid = String(req.auth.user?.studentUid || "").trim();
+
+    if (!courseId) {
+      throw new Error("courseId is required");
+    }
+    if (!studentUid) {
+      throw new Error("studentUid is not available in current session");
+    }
+
+    const activeCourses = await listStudentEnrollments(readContract, studentUid);
+    if (activeCourses.length >= MAX_STUDENT_ENROLLMENTS && !activeCourses.includes(courseId)) {
+      throw new Error(
+        `Student can enroll in up to ${MAX_STUDENT_ENROLLMENTS} courses only. Already enrolled in: ${activeCourses.join(", ")}`
+      );
+    }
+
+    await validateEnrollRequest(readContract, { courseId, studentUid });
+
+    const approvedForCourse = await isStudentApprovedForCourse(readContract, courseId, studentUid);
+    if (!approvedForCourse) {
+      const request = createOrRefreshPendingRequest({
+        courseId,
+        studentUid,
+        studentEmail: req.auth.user.email,
+        studentName: req.auth.user.fullName
+      });
+
+      return res.status(202).json({
+        message: "Enrollment request submitted. Wait for admin approval.",
+        request,
+        requiresApproval: true
+      });
+    }
+
+    const tx = await sendEnroll(writeContract, { courseId, studentUid });
+    const receipt = await tx.wait();
+
+    res.status(200).json({
+      message: "Enrollment successful",
+      txHash: receipt.hash
+    });
+  } catch (error) {
+    res.status(400).json({ error: parseContractError(error) });
+  }
+});
+
+app.post("/student/drop", requireAuth, requireRole("student"), async (req, res) => {
+  try {
+    const writeContract = getWriteContract();
+    const courseId = String(req.body?.courseId || "").trim();
+    const studentUid = String(req.auth.user?.studentUid || "").trim();
+
+    if (!courseId) {
+      throw new Error("courseId is required");
+    }
+    if (!studentUid) {
+      throw new Error("studentUid is not available in current session");
+    }
+
+    const tx = await sendDrop(writeContract, { courseId, studentUid });
+    const receipt = await tx.wait();
+
+    res.status(200).json({
+      message: "Course dropped successfully",
+      txHash: receipt.hash
+    });
+  } catch (error) {
+    res.status(400).json({ error: parseContractError(error) });
   }
 });
 
