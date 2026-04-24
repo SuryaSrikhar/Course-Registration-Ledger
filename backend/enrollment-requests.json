@@ -9,5 +9,27 @@
     "createdAt": 1776994903344,
     "decidedAt": 1776994930625,
     "decidedBy": "admin@example.com"
+  },
+  {
+    "id": "97949166-4685-4edf-8ef0-8f5fc7683799",
+    "studentUid": "PES039",
+    "studentEmail": "akhileshm2204@gmail.com",
+    "studentName": "Akhilesh",
+    "courseId": "CSE-301",
+    "status": "approved",
+    "createdAt": 1776996331904,
+    "decidedAt": 1776996355521,
+    "decidedBy": "admin@example.com"
+  },
+  {
+    "id": "c6ae7ad8-16aa-47fd-81c4-7ec6ce8a3cdf",
+    "studentUid": "PES042",
+    "studentEmail": "akshat@gmail.com",
+    "studentName": "Akshat",
+    "courseId": "CSE-201",
+    "status": "approved",
+    "createdAt": 1776996887514,
+    "decidedAt": 1776996913495,
+    "decidedBy": "admin@example.com"
   }
 ]

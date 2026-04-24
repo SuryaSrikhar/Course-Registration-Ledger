@@ -5,5 +5,12 @@
     "fullName": "Akhilesh",
     "studentUid": "PES039",
     "passwordHash": "61fcc1aef276816f2ac27da2658bf67bf5f8d2aa2dff61aa9f67424476dba55a"
+  },
+  {
+    "id": "338770fd-7bea-4282-8d41-94f079c4ff0f",
+    "email": "akshat@gmail.com",
+    "fullName": "Akshat",
+    "studentUid": "PES042",
+    "passwordHash": "7ec8e3779288d6b343af26e5b961769fc6055c6cc43d113e096fc87899e82474"
   }
 ]

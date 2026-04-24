@@ -428,6 +428,20 @@ async function isStudentApprovedForCourse(contract, courseId, studentUid) {
   return Boolean(approved);
 }
 
+async function getLinkedStudentKeyByWallet(contract, walletAddress) {
+  const normalized = String(walletAddress || "").trim();
+  if (!ethers.isAddress(normalized)) {
+    return ethers.ZeroHash;
+  }
+
+  if (!hasFunction(contract, "studentKeyByWallet", 1)) {
+    return ethers.ZeroHash;
+  }
+
+  const key = await contract.studentKeyByWallet(normalized);
+  return typeof key === "string" && key ? key : ethers.ZeroHash;
+}
+
 async function sendEnroll(contract, payload) {
   const courseId = String(payload.courseId || "").trim();
   if (!courseId) {
@@ -498,6 +512,7 @@ module.exports = {
   sendSetCourseApproval,
   sendSetStudentEligibility,
   sendUpdateCourseCapacity,
+  getLinkedStudentKeyByWallet,
   isStudentApprovedForCourse,
   validateEnrollRequest,
   sendDrop

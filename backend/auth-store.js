@@ -1,6 +1,7 @@
 const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
+const { ethers } = require("ethers");
 
 const USERS_FILE = path.resolve(__dirname, "student-users.json");
 const ADMIN_EMAIL = "admin@example.com";
@@ -39,8 +40,19 @@ function sanitizeStudent(student) {
     role: "student",
     email: student.email,
     fullName: student.fullName,
-    studentUid: student.studentUid
+    studentUid: student.studentUid,
+    chainWallet: student.chainWallet || ""
   };
+}
+
+function ensureChainWallet(student) {
+  if (student.chainWallet && ethers.isAddress(student.chainWallet)) {
+    return student.chainWallet;
+  }
+
+  const wallet = ethers.Wallet.createRandom();
+  student.chainWallet = wallet.address;
+  return student.chainWallet;
 }
 
 function registerStudentUser(payload) {
@@ -77,6 +89,7 @@ function registerStudentUser(payload) {
     email,
     fullName,
     studentUid,
+    chainWallet: ethers.Wallet.createRandom().address,
     passwordHash: sha256(password)
   };
 
@@ -114,6 +127,27 @@ function authenticate(payload) {
     throw new Error("Invalid student credentials");
   }
 
+  // Backfill chainWallet for older student records.
+  ensureChainWallet(student);
+  saveStudents(students);
+
+  return sanitizeStudent(student);
+}
+
+function getStudentByUid(studentUid) {
+  const normalizedUid = String(studentUid || "").trim().toLowerCase();
+  if (!normalizedUid) {
+    return null;
+  }
+
+  const students = readStudents();
+  const student = students.find((item) => String(item.studentUid || "").trim().toLowerCase() === normalizedUid);
+  if (!student) {
+    return null;
+  }
+
+  ensureChainWallet(student);
+  saveStudents(students);
   return sanitizeStudent(student);
 }
 
@@ -154,6 +188,7 @@ module.exports = {
   createSession,
   authenticate,
   getSession,
+  getStudentByUid,
   listStudents,
   registerStudentUser,
   removeSession

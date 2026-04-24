@@ -185,8 +185,12 @@ export default function App() {
       setBlockNumber(await provider.getBlockNumber());
 
       if (isStudent) {
-        await api.syncStudentWallet({ walletAddress: connectedAddress });
+        const syncResult = await api.syncStudentWallet({ walletAddress: connectedAddress });
         setWalletSynced(true);
+
+        if (syncResult?.usedFallbackWallet) {
+          toast.success("Connected. This account already links another student, so this student uses an assigned on-chain wallet for testing.");
+        }
       } else {
         setWalletSynced(true);
       }
@@ -515,8 +519,19 @@ export default function App() {
         {stage === "wallet" ? (
           <section className="mx-auto w-full max-w-3xl space-y-4">
             <div className="glass-panel">
-              <p className="text-xs uppercase tracking-[0.28em] text-cyan-200">Wallet Step</p>
-              <h2 className="mt-1 font-display text-2xl text-white">Connect Wallet Before Dashboard</h2>
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.28em] text-cyan-200">Wallet Step</p>
+                  <h2 className="mt-1 font-display text-2xl text-white">Connect Wallet Before Dashboard</h2>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/20"
+                >
+                  Back to Login
+                </button>
+              </div>
               <p className="mt-2 text-sm text-slate-200">
                 Logged in as {session?.user?.email} ({session?.user?.role}). Connect MetaMask to continue.
               </p>

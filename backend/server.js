@@ -1,10 +1,12 @@
 const express = require("express");
 const cors = require("cors");
+const { ethers } = require("ethers");
 const { PORT, CORS_ORIGIN, CONTRACT_ABI } = require("./config");
 const {
   createSession,
   authenticate,
   getSession,
+  getStudentByUid,
   listStudents,
   registerStudentUser,
   removeSession
@@ -22,6 +24,7 @@ const {
   createWriteContext,
   fetchStudent,
   fetchCourses,
+  getLinkedStudentKeyByWallet,
   listStudentEnrollments,
   isStudentApprovedForCourse,
   parseContractError,
@@ -108,19 +111,44 @@ async function syncStudentWallet(writeContract, user, walletAddress) {
     throw new Error("studentUid is not configured for this account");
   }
 
+  if (!ethers.isAddress(walletAddress)) {
+    throw new Error("walletAddress must be a valid address");
+  }
+
+  const linkedKey = await getLinkedStudentKeyByWallet(writeContract, walletAddress);
+  const persistedStudent = getStudentByUid(studentUid);
+  const fallbackChainWallet = persistedStudent?.chainWallet;
+
+  let registrationWallet = walletAddress;
+  if (linkedKey !== ethers.ZeroHash) {
+    if (!fallbackChainWallet || !ethers.isAddress(fallbackChainWallet)) {
+      throw new Error("No fallback wallet available for this student account");
+    }
+
+    registrationWallet = fallbackChainWallet;
+  }
+
   const student = await fetchStudent(writeContract, studentUid);
 
   if (!student.exists) {
     const tx = await sendRegisterStudent(writeContract, {
       studentUid,
-      walletAddress,
+      walletAddress: registrationWallet,
       eligible: true
     });
     await tx.wait();
-    return { synced: true, studentUid, walletAddress, createdOnChain: true, eligible: true };
+    return {
+      synced: true,
+      studentUid,
+      walletAddress,
+      chainWallet: registrationWallet,
+      createdOnChain: true,
+      eligible: true,
+      usedFallbackWallet: registrationWallet.toLowerCase() !== walletAddress.toLowerCase()
+    };
   }
 
-  if (String(student.wallet).toLowerCase() !== String(walletAddress).toLowerCase()) {
+  if (String(student.wallet).toLowerCase() !== String(registrationWallet).toLowerCase()) {
     throw new Error("This student UID is already linked to another wallet. Contact admin.");
   }
 
@@ -128,7 +156,9 @@ async function syncStudentWallet(writeContract, user, walletAddress) {
     synced: true,
     studentUid,
     walletAddress,
+    chainWallet: registrationWallet,
     createdOnChain: false,
+    usedFallbackWallet: registrationWallet.toLowerCase() !== walletAddress.toLowerCase(),
     eligible: Boolean(student.eligible)
   };
 }
